@@ -159,7 +159,7 @@ static void interrupt forinterrupt(){
 }
 
 
-
+/*
 void interrupt InterFunction( void )
 {
      // コンパレータ関連の割込み処理
@@ -183,7 +183,7 @@ void interrupt InterFunction( void )
           TMR1IF = 0 ;                       // タイマー1割込フラグをリセット
      }
 }
-
+*/
 
 
 
