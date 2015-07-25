@@ -13,10 +13,10 @@
  *                                          *
  *  use_port                                *
  *                __________                *
- *          Vdd---|1  ●   8|---Vss         *
+ *          Vdd---|1   ●   8|---Vss         *
  * (RA5)mmSonar---|2       7|---(RA0)       *
  * (RA4)cmSonar---|3       6|---SCL(RA1)    *
- *      (RA3)×---|4       5|---SDA(RA2)    *
+ *       (RA3)×---|4       5|---SDA(RA2)    *
  *                ==========                *
  ********************************************/
 
@@ -43,15 +43,62 @@ unsigned int UMS_info ;
 #define TIME_OVER  50000      // 超音波センサーから無返答時のタイムアウト時間(50ms)
 #define T1COUT     15536      // タイマー１用カウントの初期値(65536-50000:50msカウント)
 
+//  割り込みの処理
+void interrupt InterFunction( void )
+{
+     // コンパレータ関連の割込み処理
+     // センサーから返答があった場合の処理(物体からの反射有り)
+     if (ADIF == 1) {
+          TMR1ON = 0 ;                       // TMR1カウント停止
+          UMS_info = TMR1L ;                 // カウント値を記録する
+          UMS_info = UMS_info | (TMR1H << 8) ;
+          UMS_info = UMS_info - T1COUT ;
+          TMR1H = (T1COUT >> 8) ;            // カウント値の再設定
+          TMR1L = (T1COUT & 0x00ff) ;
+          ADIF = 0 ;                         // コンパレータ割込フラグをリセット
+     }
+     // タイマー１の割込み処理
+     // センサーから返答がない場合の処理(物体からの反射がない、近くに物体が無い)
+     if (TMR1IF == 1) {
+          TMR1ON = 0 ;                       // TMR1カウント停止
+          UMS_info = TIME_OVER ;             // カウント値は時間切れ
+          TMR1H = (T1COUT >> 8) ;            // カウント値の再設定
+          TMR1L = (T1COUT & 0x00ff) ;
+          TMR1IF = 0 ;                       // タイマー1割込フラグをリセット
+     }
+}
 
-int cm = 0;                //
-int mm = 0;                //
-int i = 0;                          //
-int i2c_ans = 0;           //
+/*int UsonicMeasurRead(int temp,int correction)
+{
+     unsigned long t ;
+     int ans ;
+
+     ans = 0 ;
+     TMR1ON   = 1 ;                     // TMR1カウント開始
+     UMS_info = 0 ;
+     while(UMS_info == 0) ;             // 反射波の受信を待つ
+//     // 返答時間から距離を求める
+//     if (UMS_info < TIME_OVER) {
+//          t = 331500 + (600 * temp) ;   // 音波の伝搬する速度を求める
+//          t = (t * UMS_info) / 1000000 ;// 距離の計算
+//          ans = t / 2 ;                 // 往復なので÷2
+//          ans = ans + correction ;      // 距離の補正値を加える
+//     }
+     return ans ;                       // mmの距離を返す
+}*/
 
 void init();
 
+int cm = 0;
+int mm = 0;
+int i = 0;
+int i2c_ans = 0;
+int pin;
+
 int main(void) {
+    init();
+    I2C_init();
+    OPTION_REG = 0b00000000 ; // デジタルI/Oに内部プルアップ抵抗を使用する
     
     // 反射波時刻カウント用タイマー１の設定(1カウントは1us)
      T1CON   = 0b01110000 ;   // クロックソースはFosc、プリスケーラ1/8、
@@ -59,53 +106,58 @@ int main(void) {
      TMR1L   = (T1COUT & 0x00ff) ;
      TMR1IF  = 0 ;            // TIMER1のフラグを0にする
      TMR1IE  = 1 ;            // TIMER1の割込みを許可する
-    
-    init();
-    I2C_init();
+     // ＤＡＣの設定(約2.0Vをコンパレータの閾値とする)
+     DACCON0 = 0b11000000 ;   // VDD/VSSを使用、DACOUTピン(RA2)使わない
+     DACCON1 = 13 ;           // 約2.0Vを出力( 5V*(13/2^5)=2.03125 )
+     // コンパレータ２の設定(割込みで利用)
+//     CM2CON0 = 0b10010110 ;   // －＞＋でON、高速モード、出力は反転、ヒステリシス有効
+//     CM2CON1 = 0b10010001 ;   // 立上りで割込み利用、＋はDAC入力、－はRA1から入力
+//     C2IF    = 0 ;            // コンパレータ２割込フラグを0にする
+     ADIF    = 0 ;
+//     C2IE    = 1 ;            // コンパレータ２割込みを許可する
+     ADIE    = 1 ;
+     // 周辺装置全体の割り込みを許可
+     PEIE    = 1 ;            // 周辺装置割り込み有効
+     GIE     = 1 ;            // 全割込み処理を許可する
 
     while (1) {
         cm = PalseSonarRead_cm();
         cm = cm * 10;
-//        if(cm >= 230){
-//            cm = cm + 10;
-//        }
         if((cm != 0) && (cm <= 300)){
             i2c_ans = cm;
         }else{
             mm = PalseSonarRead_mm();
-//            mm = mm - (mm * (-0.01749) + 28.78306);
             i2c_ans = mm;
         }
         send_data[0] = i2c_ans % 0x100;     //dat1 = (char)data;
         send_data[1] = i2c_ans / 0x100;     //dat2 = (char)data >> 8;
         //data = dat2 * 0x100 + dat1; 読み出しの際
-        
-        // 20℃と言う事でセンサーから距離を読込む、20mm程誤差が有るので足して置く
-//          val = UsonicMeasurRead(20,20) ;
-        
-    __delay_ms(30);
+        __delay_ms(30);
     }
 
     return (0);
 }
 
 void init() {
-    OSCCONbits.IRCF = 0b1111;       //内部クロック16MHzで駆動
-    ANSELA  = 0x00;                 //全て0:デジタルI/Oとする
-//    TRISA4 = 0;                     //cm OUT
-//    TRISA5 = 1;                     //mm IN
-    TRISA = 0b00100110;
+    OSCCONbits.IRCF = 0b1111; //Set oscillator 16MHz
+    ANSELA = 0x00; //Set RA pins digital
+    TRISA4 = 0;
+    TRISA5 = 1;
 
-    PORTA = 0x00;                   //PORTAの中身をきれいにする
+    PORTA = 0x00; //Set PORTA Low
     return;
 }
 
+static void interrupt forinterrupt(){
+    #include "I2C_slave_int.h"
+}
+
 int PalseSonarRead_cm(){
-    long leng;
+    int leng;
     int ans_cm;
     
-    TRISA4 = 0;
-    RA4 = 0;
+    TRISA4 = 0; //出力
+    RA4 = 0;    //LOW
     __delay_ms(2);
     RA4 = 1;
     __delay_ms(5);
@@ -120,10 +172,10 @@ int PalseSonarRead_cm(){
 }
 
 int PalseSonarRead_mm(){
-    unsigned long ans_pw = pulseIn(5);
-	return ans_pw;
+    unsigned long ans_mm = pulseIn(5);
+	return ans_mm;
 }
-int pin;
+
 int pulseIn(pin){
     long t ;
     int ans ;
@@ -153,47 +205,3 @@ int pulseIn(pin){
         return ans;
     }
 }
-
-static void interrupt forinterrupt(){
-    #include "I2C_slave_int.h"
-}
-
-
-/*
-void interrupt InterFunction( void )
-{
-     // コンパレータ関連の割込み処理
-     // センサーから返答があった場合の処理(物体からの反射有り)
-     if (C1IE == 1) {
-          TMR1ON = 0 ;                       // TMR1カウント停止
-          UMS_info = TMR1L ;                 // カウント値を記録する
-          UMS_info = UMS_info | (TMR1H << 8) ;
-          UMS_info = UMS_info - T1COUT ;
-          TMR1H = (T1COUT >> 8) ;            // カウント値の再設定
-          TMR1L = (T1COUT & 0x00ff) ;
-          C1IE = 0 ;                         // コンパレータ割込フラグをリセット
-     }
-     // タイマー１の割込み処理
-     // センサーから返答がない場合の処理(物体からの反射がない、近くに物体が無い)
-     if (TMR1IF == 1) {
-          TMR1ON = 0 ;                       // TMR1カウント停止
-          UMS_info = TIME_OVER ;             // カウント値は時間切れ
-          TMR1H = (T1COUT >> 8) ;            // カウント値の再設定
-          TMR1L = (T1COUT & 0x00ff) ;
-          TMR1IF = 0 ;                       // タイマー1割込フラグをリセット
-     }
-}
-*/
-
-
-
-
-/*// 返答時間から距離を求める
-     if (UMS_info < TIME_OVER) {
-          t = 331500 + (600 * temp) ;   // 音波の伝搬する速度を求める
-          t = (t * UMS_info) / 1000000 ;// 距離の計算
-          ans = t / 2 ;                 // 往復なので÷2
-          ans = ans + correction ;      // 距離の補正値を加える
-     }
-     return ans ;                       // mmの距離を返す
-*/
