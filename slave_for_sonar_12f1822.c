@@ -13,10 +13,10 @@
  *                                          *
  *  use_port                                *
  *                __________                *
- *          Vdd---|1   ●   8|---Vss         *
+ *          Vdd---|1  ●   8|---Vss         *
  * (RA5)mmSonar---|2       7|---(RA0)       *
  * (RA4)cmSonar---|3       6|---SCL(RA1)    *
- *       (RA3)×---|4       5|---SDA(RA2)    *
+ *      (RA3)×---|4       5|---SDA(RA2)    *
  *                ==========                *
  ********************************************/
 
@@ -42,50 +42,6 @@ unsigned int UMS_info ;
 #define _XTAL_FREQ 16000000
 #define TIME_OVER  50000      // 超音波センサーから無返答時のタイムアウト時間(50ms)
 #define T1COUT     15536      // タイマー１用カウントの初期値(65536-50000:50msカウント)
-
-//  割り込みの処理
-void interrupt InterFunction( void )
-{
-     // コンパレータ関連の割込み処理
-     // センサーから返答があった場合の処理(物体からの反射有り)
-     if (ADIF == 1) {
-          TMR1ON = 0 ;                       // TMR1カウント停止
-          UMS_info = TMR1L ;                 // カウント値を記録する
-          UMS_info = UMS_info | (TMR1H << 8) ;
-          UMS_info = UMS_info - T1COUT ;
-          TMR1H = (T1COUT >> 8) ;            // カウント値の再設定
-          TMR1L = (T1COUT & 0x00ff) ;
-          ADIF = 0 ;                         // コンパレータ割込フラグをリセット
-     }
-     // タイマー１の割込み処理
-     // センサーから返答がない場合の処理(物体からの反射がない、近くに物体が無い)
-     if (TMR1IF == 1) {
-          TMR1ON = 0 ;                       // TMR1カウント停止
-          UMS_info = TIME_OVER ;             // カウント値は時間切れ
-          TMR1H = (T1COUT >> 8) ;            // カウント値の再設定
-          TMR1L = (T1COUT & 0x00ff) ;
-          TMR1IF = 0 ;                       // タイマー1割込フラグをリセット
-     }
-}
-
-/*int UsonicMeasurRead(int temp,int correction)
-{
-     unsigned long t ;
-     int ans ;
-
-     ans = 0 ;
-     TMR1ON   = 1 ;                     // TMR1カウント開始
-     UMS_info = 0 ;
-     while(UMS_info == 0) ;             // 反射波の受信を待つ
-//     // 返答時間から距離を求める
-//     if (UMS_info < TIME_OVER) {
-//          t = 331500 + (600 * temp) ;   // 音波の伝搬する速度を求める
-//          t = (t * UMS_info) / 1000000 ;// 距離の計算
-//          ans = t / 2 ;                 // 往復なので÷2
-//          ans = ans + correction ;      // 距離の補正値を加える
-//     }
-     return ans ;                       // mmの距離を返す
-}*/
 
 void init();
 
@@ -150,6 +106,26 @@ void init() {
 
 static void interrupt forinterrupt(){
     #include "I2C_slave_int.h"
+    // コンパレータ関連の割込み処理
+    // センサーから返答があった場合の処理(物体からの反射有り)
+    if (ADIF == 1) {
+        TMR1ON = 0 ;                       // TMR1カウント停止
+        UMS_info = TMR1L ;                 // カウント値を記録する
+        UMS_info = UMS_info | (TMR1H << 8) ;
+        UMS_info = UMS_info - T1COUT ;
+        TMR1H = (T1COUT >> 8) ;            // カウント値の再設定
+        TMR1L = (T1COUT & 0x00ff) ;
+        ADIF = 0 ;                         // コンパレータ割込フラグをリセット
+    }
+    // タイマー１の割込み処理
+    // センサーから返答がない場合の処理(物体からの反射がない、近くに物体が無い)
+    if (TMR1IF == 1) {
+        TMR1ON = 0 ;                       // TMR1カウント停止
+        UMS_info = TIME_OVER ;             // カウント値は時間切れ
+        TMR1H = (T1COUT >> 8) ;            // カウント値の再設定
+        TMR1L = (T1COUT & 0x00ff) ;
+        TMR1IF = 0 ;                       // タイマー1割込フラグをリセット
+    }
 }
 
 int PalseSonarRead_cm(){
