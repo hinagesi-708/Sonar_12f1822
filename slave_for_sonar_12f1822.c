@@ -20,6 +20,7 @@
  *      (RA3)×---|4       5|---SDA(RA2)    *
  *                ==========                *
  ********************************************/
+
 #include <xc.h>
 #include "I2C_slave.h"
 
@@ -38,36 +39,25 @@
 
 #define _XTAL_FREQ 16000000
 
-
 void init();
 
 int main(void) {
     init();
     I2C_init();
     
-    int cm;
-    int mm;
-    int i2c_ans;
+//    int cm = 0;
+    int mm = 0;
+    int i2c_ans = 0;
 
     while (1) {
-        cm = 0;
-        mm = 0;
-        i2c_ans = 0;
-        cm =  Pls_cm();
-        cm = cm * 10;
-        if ((cm != 0) && (cm <= 300)){
-            i2c_ans = cm;
-        }else{;
-            mm = Pls_mm();
-            i2c_ans = mm;
-        }
-        
+//        i2c_ans = 800;      //test用コード
+        i2c_ans = Pls_mm();
+        send_data[0] = i2c_ans % 0x100;     //dat1 = (char)data;
+        send_data[1] = i2c_ans / 0x100;     //dat2 = (char)data >> 8;
+
     }
-    send_data[0] = i2c_ans % 0x100;     //dat1 = (char)data;
-    send_data[1] = i2c_ans / 0x100;     //dat2 = (char)data >> 8;
-    //data = dat2 * 0x100 + dat1; 読み出しの際
+
     return (0);
-    __delay_ms(100);
 }
 
 void init() {
@@ -79,44 +69,13 @@ void init() {
     PORTA = 0x00;                   //Set PORTA Low
     return;
 }
-int Pls_cm() {
-    int leng_cm;
-    
-    TRISA0 = 0;
-    RA0 = 0;
-    __delay_us(2);
-    RA0 = 1;
-    __delay_us(5);
-    RA0 = 0;
-    
-    TRISA0 = 1;
-    leng_cm = PulseIn_cm();
-    
-    return leng_cm;
-}
-int PulseIn_cm(){
-    long time_cm = 0;
-    while(RA0 == 1);
-    while(RA0 == 0);
-    while(RA0 == 1){
-        __delay_us(1);
-        time_cm ++;
-        if(time_cm > 20000) break;
-    }
-    time_cm = time_cm / 58;
-    return time_cm;
-}
 
 int Pls_mm(){
-    long time_mm = 0;
+    int i;
     while(RA5 == 1);
     while(RA5 == 0);
-    while(RA5 == 1){
-        __delay_us(1);
-        time_mm ++;
-        if(time_mm > 5000) break;
-    }
-    return time_mm;
+    for(i = 0; RA5 == 1; i++);
+    return i;
 }
 
 static void interrupt forinterrupt(){
