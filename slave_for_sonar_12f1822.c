@@ -14,13 +14,12 @@
  *                                          *
  *  use_port                                *
  *                __________                *
- *          Vdd---|1  ●   8|---Vss         *
+ *          Vdd---|1   ●   8|---Vss         *
  * (RA5)mmSonar---|2       7|---cmSonar(RA0)*
  *        (RA4)---|3       6|---SCL(RA1)    *
- *      (RA3)×---|4       5|---SDA(RA2)    *
+ *       (RA3)×---|4       5|---SDA(RA2)    *
  *                ==========                *
  ********************************************/
-
 #include <xc.h>
 #include "I2C_slave.h"
 
@@ -39,44 +38,88 @@
 
 #define _XTAL_FREQ 16000000
 
+
 void init();
 
 int main(void) {
     init();
     I2C_init();
     
-//    int cm = 0;
-    int mm = 0;
-    int i2c_ans = 0;
+    int cm;
+    int mm;
+    int i2c_ans;
 
     while (1) {
-        i2c_ans = 800;      //test用コード
-        i2c_ans = Pls_mm();
-        i2c_ans = 800;      //test用コード
+        cm = 0;
+        mm = 0;
+        i2c_ans = 0;
+        cm =  Pls_cm();
+        cm = (cm - 1.644394)/1.42615; 
+        if ((cm != 0) && (cm <= 300)){
+            i2c_ans = cm;
+        }else{
+            mm = Pls_mm();
+            mm = (mm + 0.18621)/0.251626;
+            mm = (mm - 18.33333)/0.980642;
+            i2c_ans = mm;
+        }
         send_data[0] = i2c_ans % 0x100;     //dat1 = (char)data;
         send_data[1] = i2c_ans / 0x100;     //dat2 = (char)data >> 8;
-
+//      data = dat2 * 0x100 + dat1; 読み出しの際
+        __delay_ms(50);
     }
-
     return (0);
 }
 
 void init() {
     OSCCONbits.IRCF = 0b1111;       //Set oscillator 16MHz
     ANSELA  = 0x00;                 //Set RA pins digital
-    TRISA4 = 0;
-    TRISA5 = 0;
+    TRISA0 = 1;
+    TRISA5 = 1;
 
     PORTA = 0x00;                   //Set PORTA Low
     return;
 }
 
+int Pls_cm() {
+    int leng_cm;
+    
+    TRISA0 = 0;
+    RA0 = 0;
+    __delay_us(2);
+    RA0 = 1;
+    __delay_us(5);
+    RA0 = 0;
+    
+    TRISA0 = 1;
+    leng_cm = PulseIn_cm();
+    __delay_ms(1);
+    
+    return leng_cm;
+}
+int PulseIn_cm(){
+    long time_cm = 0;
+    while(RA0 == 1);
+    while(RA0 == 0);
+    while(RA0 == 1){
+        __delay_us(1);
+        time_cm ++;
+        if(time_cm > 500) break;
+    }
+    time_cm = time_cm;
+    return time_cm;
+}
+
 int Pls_mm(){
-    int i;
+    long time_mm = 0;
     while(RA5 == 1);
     while(RA5 == 0);
-    for(i = 0; RA5 == 1; i++);
-    return i;
+    while(RA5 == 1){
+        __delay_us(1);
+        time_mm ++;
+//        if(time_mm > 5000) break;
+    }
+    return time_mm;
 }
 
 static void interrupt forinterrupt(){
