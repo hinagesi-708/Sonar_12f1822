@@ -50,8 +50,9 @@ int main(void) {
     int i2c_ans = 0;
 
     while (1) {
-//        i2c_ans = 800;      //test用コード
+        i2c_ans = 800;      //test用コード
         i2c_ans = Pls_mm();
+        i2c_ans = 800;      //test用コード
         send_data[0] = i2c_ans % 0x100;     //dat1 = (char)data;
         send_data[1] = i2c_ans / 0x100;     //dat2 = (char)data >> 8;
 
