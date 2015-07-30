@@ -55,12 +55,16 @@ int main(void) {
         i2c_ans = 0;
         cm =  Pls_cm();
         cm = (cm - 1.644394)/1.42615; 
+        cm = (cm - 0.2)/1.021886;
+        cm = (cm + 6.2)/0.999543;
+        cm = (cm -0.6)/1.004514;
         if ((cm != 0) && (cm <= 300)){
             i2c_ans = cm;
         }else{
             mm = Pls_mm();
             mm = (mm + 0.18621)/0.251626;
             mm = (mm - 18.33333)/0.980642;
+            mm = (mm - 5.4)/1.002109;
             i2c_ans = mm;
         }
         send_data[0] = i2c_ans % 0x100;     //dat1 = (char)data;
@@ -104,7 +108,7 @@ int PulseIn_cm(){
     while(RA0 == 1){
         __delay_us(1);
         time_cm ++;
-        if(time_cm > 500) break;
+//        if(time_cm > 500) break;
     }
     time_cm = time_cm;
     return time_cm;
